@@ -16,6 +16,7 @@ new_services = {"services": [],
 
 @bot.message_handler(commands=["start"])
 def start(message):
+    clear_sevices()
     user = message.from_user
     first_name = user.first_name
     markup = types.ReplyKeyboardMarkup(resize_keyboard=True, row_width=2)
@@ -103,10 +104,18 @@ def transfer_task(message):
 
 @bot.message_handler(func=lambda message: message.text.lower() == "нагадати про запис")
 def recall(message):
-    bot.send_message(message.from_user.id,
-                     text="Конечно дорогая сучка\n"
-                          "Сейчас сверю есть ли ты в записях и проверю на когда можно\n"
-                          "Допилю только базу данных сюда")
+    order = get_user_procedure(message.from_user.id)
+    if order:
+        bot.send_message(message.from_user.id,
+                         text=f"Звісно, 🤗\n"
+                              f"Ви записані на {order.meeting_time}")
+    else:
+        markup = types.ReplyKeyboardMarkup(resize_keyboard=True, row_width=2)
+        check_me_in = types.KeyboardButton("Записатися")
+        markup.add(check_me_in)
+        bot.send_message(message.from_user.id,
+                         text="Вибачте але у вас поки що немає активних записів",
+                         reply_markup=markup)
 
 
 def hands_or_foots(message):
@@ -136,10 +145,10 @@ def foots(message):
     pedik2 = types.KeyboardButton("Педикюр з покриттям")
     markup.add(pedik1, pedik2)
     bot.send_message(message.from_user.id, text="Оберіть, що саме вас цікавить ⬇️", reply_markup=markup)
-    bot.register_next_step_handler(message, kind_of_foots_service)
+    bot.register_next_step_handler(message, kind_of_foot_service)
 
 
-def kind_of_foots_service(message):
+def kind_of_foot_service(message):
     new_services["services"].append(message.text)
     markup = types.ReplyKeyboardMarkup(resize_keyboard=True, row_width=2)
     if message.text.lower() == "педикюр гігієнічний" or message.text.lower() == "педикюр з покриттям":
@@ -168,6 +177,15 @@ def additions(message):
         bot.register_next_step_handler(message, final)
 
 
+def second_procedure(message):
+    if message.text == "Хочу ще манікюр":
+        hands(message)
+    elif message.text == "Хочу ще педикюр":
+        foots(message)
+    else:
+        final(message)
+
+
 def final2(message):
     markup = types.ReplyKeyboardMarkup(resize_keyboard=True, row_width=2)
     new_services["additions"].append(message.text)
@@ -186,15 +204,6 @@ def final2(message):
         bot.register_next_step_handler(message, second_procedure)
 
 
-def second_procedure(message):
-    if message.text == "Хочу ще манікюр":
-        hands(message)
-    elif message.text == "Хочу ще педикюр":
-        foots(message)
-    else:
-        final(message)
-
-
 def final(message):
     if message.text in ADDITIVES_LIST:
         new_services["additions"].append(message.text)
@@ -204,15 +213,7 @@ def final(message):
         bot.register_next_step_handler(message, get_user_phone)
     else:
         new_services["user_phone"] = get_user_info(message.from_user.id).user_mobile
-        order_message = f"Ваше замовлення: {new_services['user_first_name']}\n" \
-                        f"{'|'.join(new_services['services'])}\n" \
-                        f"Додаткові послуги: {'|'.join(new_services['additions'])}\n" \
-                        f"Ваш контактний номер: {new_services['user_phone']}"
-        bot.send_message(admin_id, order_message)
-        print(order_message)
-        add_procedure(new_services=new_services, user_id=message.from_user.id, time=datetime.utcnow())
-        bot.send_message(message.from_user.id, f"Ви успішно записались \n"
-                                               f"{order_message}")
+        procedure_to_db(user_id=message.from_user.id, time=datetime.utcnow())
 
 
 def get_user_phone(message):
@@ -228,15 +229,7 @@ def get_user_phone(message):
                         last_name=message.from_user.last_name,
                         mobile=new_services["user_phone"])
             add_user(user)
-            order_message = f"Ваше замовлення: {new_services['user_first_name']}\n" \
-                            f"{'|'.join(new_services['services'])}\n" \
-                            f"Додаткові послуги: {'|'.join(new_services['additions'])}\n" \
-                            f"Ваш контактний номер: {new_services['user_phone']}"
-            add_procedure(new_services=new_services, user_id=message.from_user.id, time=datetime.utcnow())
-            bot.send_message(admin_id, order_message)
-            print(order_message)
-            bot.send_message(message.from_user.id, f"Ви успішно записались \n"
-                                                   f"{order_message}")
+            procedure_to_db(user_id=message.from_user.id, time=datetime.utcnow())
 
         else:
             """IF PHONE IS NOT VALID TRY AGAIN"""
@@ -246,6 +239,24 @@ def get_user_phone(message):
     except AttributeError:
         bot.send_message(message.from_user.id, text="Ви вказали некоректиний номер🤨, введіть будьласка ще раз")
         bot.register_next_step_handler(message, get_user_phone)
+
+
+def procedure_to_db(user_id: int, time: datetime):
+    order_message = f"Ваше замовлення: {new_services['user_first_name']}\n" \
+                    f"{'|'.join(new_services['services'])}\n" \
+                    f"Додаткові послуги: {'|'.join(new_services['additions'])}\n" \
+                    f"Ваш контактний номер: {new_services['user_phone']}"
+    print(order_message)
+    bot.send_message(admin_id, order_message)
+    add_procedure(new_services=new_services, user_id=user_id, time=time)
+    bot.send_message(user_id, f"Ви успішно записались \n"
+                              f"{order_message}")
+    clear_sevices()
+
+
+def clear_sevices():
+    new_services["services"].clear()
+    new_services["additions"].clear()
 
 
 if __name__ == "__main__":
