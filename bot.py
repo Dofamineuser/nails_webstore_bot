@@ -10,6 +10,7 @@ from datetime import datetime
 bot = telebot.TeleBot(TOKEN)
 admin_id = ADMIN_ID
 
+# temporary storage of services
 new_services = {"services": [],
                 "additions": []}
 
@@ -30,8 +31,8 @@ def start(message):
     else:
         # welcome letter if user not exist
         bot.send_message(message.from_user.id, f"Вітаю, {first_name} ! 🖐\n"
-                                               f"Я бот для запису до [anastasiya_nails_dnipro_](https://instagram.com/anastasiya_nails_dnipro_?igshid=MzRlODBiNWFlZA==)",
-                                                 parse_mode="markdown")
+                                               f"Я бот для запису до {INSTA_MESSAGE_PART}{INSTA_LINK}",
+                                               parse_mode="markdown")
 
     """CREATING START BUTTONS"""
     check_me_in = types.KeyboardButton("Записатися")
@@ -45,7 +46,7 @@ def start(message):
 
 
 @bot.message_handler(func=lambda message: message.text.lower() == "записатися")
-def create_task(message):
+def start_create_event(message):
     """START OF CREATING ORDER"""
     markup = types.ReplyKeyboardMarkup(resize_keyboard=True, row_width=2)
     order = get_user_procedure(message.from_user.id)
@@ -59,15 +60,16 @@ def create_task(message):
                               "Ви можете змінити час або видалити і створити новий запис",
                          reply_markup=markup)
     else:
+        # event by user id is not exists
         manikyr = types.KeyboardButton("Ручки 💅")
         pedik = types.KeyboardButton("Ніжки 👣")
         markup.add(manikyr, pedik)
         bot.send_message(message.from_user.id, text="Оберіть процедуру", reply_markup=markup)
-        bot.register_next_step_handler(message, hands_or_foots)
+        bot.register_next_step_handler(message, hands_or_foots_selection)
 
 
 @bot.message_handler(func=lambda message: message.text.lower() == "скасувати запис")
-def cancel_task(message):
+def cancel_event(message):
     """REMOVE ORDER IF EXISTS"""
     markup = types.ReplyKeyboardMarkup(resize_keyboard=True, row_width=2)
     check_me_in = types.KeyboardButton("Записатися")
@@ -86,7 +88,7 @@ def cancel_task(message):
 
 
 @bot.message_handler(func=lambda message: message.text.lower() == "перенести запис")
-def transfer_task(message):
+def transfer_event(message):
     """CHANGE ORDER TIME"""
     markup = types.ReplyKeyboardMarkup(resize_keyboard=True, row_width=2)
     order = get_user_procedure(message.from_user.id)
@@ -96,6 +98,7 @@ def transfer_task(message):
         change_order_time(order=order, meeting_time=new_meeting_time)
         bot.send_message(message.from_user.id, text="Ваш запис перенесено")
     else:
+        # event by user id is not exists
         check_me_in = types.KeyboardButton("Записатися")
         markup.add(check_me_in)
         bot.send_message(message.from_user.id, text="У вас немає активного запису який можна перенести",
@@ -103,13 +106,14 @@ def transfer_task(message):
 
 
 @bot.message_handler(func=lambda message: message.text.lower() == "нагадати про запис")
-def recall(message):
+def recall_event(message):
     order = get_user_procedure(message.from_user.id)
     if order:
         bot.send_message(message.from_user.id,
                          text=f"Звісно, 🤗\n"
                               f"Ви записані на {order.meeting_time}")
     else:
+        # event by user id is not exists
         markup = types.ReplyKeyboardMarkup(resize_keyboard=True, row_width=2)
         check_me_in = types.KeyboardButton("Записатися")
         markup.add(check_me_in)
@@ -118,17 +122,17 @@ def recall(message):
                          reply_markup=markup)
 
 
-def hands_or_foots(message):
+def hands_or_foots_selection(message):
     """USER SELECTED KIND OF NAILS PROCEDURE"""
     new_services["kind_nails_procedure"] = message.text[:5]
 
     if message.text.lower() == "ручки 💅":
-        hands(message)
+        hands_services(message)
     elif message.text.lower() == "ніжки 👣":
-        foots(message)
+        foots_services(message)
 
 
-def hands(message):
+def hands_services(message):
     markup = types.ReplyKeyboardMarkup(resize_keyboard=True, row_width=2)
     manik1 = types.KeyboardButton("Манікюр гігієнічний")
     manik2 = types.KeyboardButton("Манікюр з покриттям")
@@ -139,7 +143,7 @@ def hands(message):
     bot.register_next_step_handler(message, additions)
 
 
-def foots(message):
+def foots_services(message):
     markup = types.ReplyKeyboardMarkup(resize_keyboard=True, row_width=2)
     pedik1 = types.KeyboardButton("Педикюр гігієнічний")
     pedik2 = types.KeyboardButton("Педикюр з покриттям")
@@ -172,21 +176,12 @@ def additions(message):
     markup.add(additions1, additions2, additions3, additions4, additions5, additions6, additions7)
     bot.send_message(message.from_user.id, text="Оберіть додаткові послуги", reply_markup=markup)
     if len(new_services["services"]) + len(new_services["additions"]) < 4:
-        bot.register_next_step_handler(message, final2)
+        bot.register_next_step_handler(message, second_event_request)
     else:
         bot.register_next_step_handler(message, final)
 
 
-def second_procedure(message):
-    if message.text == "Хочу ще манікюр":
-        hands(message)
-    elif message.text == "Хочу ще педикюр":
-        foots(message)
-    else:
-        final(message)
-
-
-def final2(message):
+def second_event_request(message):
     markup = types.ReplyKeyboardMarkup(resize_keyboard=True, row_width=2)
     new_services["additions"].append(message.text)
     if new_services["kind_nails_procedure"] == "Ручки":
@@ -194,14 +189,23 @@ def final2(message):
         final_message2 = types.KeyboardButton("Завершити запис")
         markup.add(final_message1, final_message2)
         bot.send_message(message.from_user.id, text="Бажаєте додати ще послуги?", reply_markup=markup)
-        bot.register_next_step_handler(message, second_procedure)
+        bot.register_next_step_handler(message, second_event)
 
     elif new_services["kind_nails_procedure"] == "Ніжки":
         final_message1 = types.KeyboardButton("Хочу ще манікюр")
         final_message2 = types.KeyboardButton("Завершити запис")
         markup.add(final_message1, final_message2)
         bot.send_message(message.from_user.id, text="Бажаєте додати ще послуги?", reply_markup=markup)
-        bot.register_next_step_handler(message, second_procedure)
+        bot.register_next_step_handler(message, second_event)
+
+
+def second_event(message):
+    if message.text == "Хочу ще манікюр":
+        hands_services(message)
+    elif message.text == "Хочу ще педикюр":
+        foots_services(message)
+    else:
+        final(message)
 
 
 def final(message):
@@ -213,7 +217,7 @@ def final(message):
         bot.register_next_step_handler(message, get_user_phone)
     else:
         new_services["user_phone"] = get_user_info(message.from_user.id).user_mobile
-        procedure_to_db(user_id=message.from_user.id, time=datetime.utcnow())
+        event_to_db(user_id=message.from_user.id, time=datetime.utcnow())
 
 
 def get_user_phone(message):
@@ -229,7 +233,7 @@ def get_user_phone(message):
                         last_name=message.from_user.last_name,
                         mobile=new_services["user_phone"])
             add_user(user)
-            procedure_to_db(user_id=message.from_user.id, time=datetime.utcnow())
+            event_to_db(user_id=message.from_user.id, time=datetime.utcnow())
 
         else:
             """IF PHONE IS NOT VALID TRY AGAIN"""
@@ -241,7 +245,7 @@ def get_user_phone(message):
         bot.register_next_step_handler(message, get_user_phone)
 
 
-def procedure_to_db(user_id: int, time: datetime):
+def event_to_db(user_id: int, time: datetime):
     order_message = f"Ваше замовлення: {new_services['user_first_name']}\n" \
                     f"{'|'.join(new_services['services'])}\n" \
                     f"Додаткові послуги: {'|'.join(new_services['additions'])}\n" \
