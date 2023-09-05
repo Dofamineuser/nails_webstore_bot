@@ -17,7 +17,7 @@ new_services = {"services": [],
 
 @bot.message_handler(commands=["start"])
 def start(message):
-    clear_sevices()
+    clear_services()
     user = message.from_user
     first_name = user.first_name
     markup = types.ReplyKeyboardMarkup(resize_keyboard=True, row_width=2)
@@ -255,10 +255,11 @@ def event_to_db(user_id: int, time: datetime):
     add_procedure(new_services=new_services, user_id=user_id, time=time)
     bot.send_message(user_id, f"Ви успішно записались \n"
                               f"{order_message}")
-    clear_sevices()
+    clear_services()
 
 
-def clear_sevices():
+def clear_services():
+    """CLEAR TEMPORARY FOLDER AFTER OR BEFORE USERGE"""
     new_services["services"].clear()
     new_services["additions"].clear()
 
