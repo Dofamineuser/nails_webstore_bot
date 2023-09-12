@@ -1,5 +1,4 @@
-import sqlalchemy as db
-from sqlalchemy import create_engine, Column, Integer, String, ForeignKey, DateTime
+from sqlalchemy import create_engine, Column, Integer, String, ForeignKey, DateTime, BigInteger
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import sessionmaker
 from configs import DB_USER, DB_NAME, DB_HOST, DB_PASSWORD
@@ -24,7 +23,7 @@ class User(Base):
 
     __tablename__ = "user"
 
-    user_id = Column(Integer, primary_key=True, unique=True)
+    user_id = Column(BigInteger, primary_key=True, unique=True)
     username = Column(String)
     user_first_name = Column(String)
     user_last_name = Column(String)
@@ -70,7 +69,7 @@ class Order(Base):
 
     __tablename__ = "order"
 
-    user_id = Column(Integer, ForeignKey("user.user_id"), primary_key=True)
+    user_id = Column(BigInteger, ForeignKey("user.user_id"), primary_key=True)
     meeting_time = Column(DateTime, default=datetime.utcnow)
     kind_nails_service = Column(String)
     procedure1 = Column(String)

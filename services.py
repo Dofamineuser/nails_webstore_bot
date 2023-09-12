@@ -1,7 +1,25 @@
+import re
+import random
+from datetime import datetime
+
 from models import User, Session, Procedure, Addition, Order
+from configs import ADMIN_ID
 
 
 session = Session()
+
+calendar = {"1": "Січня",
+            "2": "Лютого",
+            "3": "Березня",
+            "4": "Квітня",
+            "5": "Травня",
+            "6": "Червня",
+            "7": "Липня",
+            "8": "Серпня",
+            "9": "Вересня",
+            "10": "Жовтня",
+            "11": "Листопада",
+            "12": "Грудня",}
 
 
 def add_user(user: User):
@@ -49,6 +67,23 @@ def get_user_info(user_id: int) -> User:
 
 def add_procedure(new_services: dict, user_id: int, time):
     """ADD PROCEDURE RECORD HAVE DIFFERENT COUNT OF PARAMETERS"""
+
+    # create fake user_id for admin order
+    if user_id == int(ADMIN_ID):
+        random_number = random.randint(100000, 999999)
+        exist = get_user_procedure(random_number)
+        if exist:
+            random_number2 = random.randint(100000, 999999)
+            user_id = random_number2
+        else:
+            user_id = random_number
+        user = User(user_id=user_id,
+                    username="fakeuser",
+                    first_name="fakeuser",
+                    last_name="fakeuser",
+                    mobile="067576767")
+        add_user(user)
+
     if len(new_services["services"]) + len(new_services["additions"]) == 2:
         order = Order(
             user_id=user_id,
@@ -112,3 +147,57 @@ def add_test_user():
                 last_name="last_name",
                 mobile="986785474")
     add_user(user)
+
+
+def get_all_events() -> list:
+    # return list of all created events dicts
+    all_events = session.query(Order).all()
+    order_dicts = []
+    for event in all_events:
+        usr_first_name = get_user_info(event.user_id).user_first_name
+        if event.procedure3 is None:
+            order_dicts.append({"user_id": event.user_id,
+                                "user_first_name": usr_first_name,
+                                "date": event.meeting_time,
+                                "procedure1": event.procedure1,
+                                "procedure2": event.procedure2}
+                               )
+
+        elif event.procedure3:
+            order_dicts.append({"user_id": event.user_id,
+                                "user_first_name": usr_first_name,
+                                "date": event.meeting_time,
+                                "procedure1": event.procedure1,
+                                "procedure2": event.procedure2,
+                                "procedure3": event.procedure3}
+                               )
+        elif event.procedure4:
+            order_dicts.append({"user_id": event.user_id,
+                                "user_first_name": usr_first_name,
+                                "date": event.meeting_time,
+                                "procedure1": event.procedure1,
+                                "procedure2": event.procedure2,
+                                "procedure3": event.procedure3,
+                                "procedure4": event.procedure4}
+                               )
+        else:
+            order_dicts.append({"user_id": event.user_id,
+                                "user_first_name": usr_first_name,
+                                "date": event.meeting_time,
+                                "procedure1": event.procedure1,
+                                "procedure2": event.procedure2,
+                                "procedure3": event.procedure3,
+                                "procedure4": event.procedure4,
+                                "additions": event.additions}
+                               )
+
+    return [order_dicts]
+
+
+def rem_selected_order(message):
+    user_id = re.findall(r'\d+', message.text[3:15])
+    try:
+        remove_order_record(user_id[0])
+    except IndexError:
+        print("Record was not deleted")
+

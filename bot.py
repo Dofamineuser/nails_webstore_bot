@@ -1,9 +1,10 @@
+import re
 import telebot
 from telebot import types
 from configs import TOKEN, ADMIN_ID, INSTA_MESSAGE_PART, INSTA_LINK, ADDITIVES_LIST
 from models import User
 from services import add_user, user_exist, get_user_info, add_procedure,\
-    get_user_procedure, remove_order_record, change_order_time
+    get_user_procedure, remove_order_record, change_order_time, get_all_events, calendar, rem_selected_order
 from datetime import datetime
 
 
@@ -15,6 +16,54 @@ new_services = {"services": [],
                 "additions": []}
 
 
+class Admin(telebot.types.Message):
+
+    def admin_start(self):
+        markup = types.ReplyKeyboardMarkup(resize_keyboard=True, row_width=2)
+        bot.send_message(ADMIN_ID, text=f"Привет {self.from_user.first_name}")
+
+        add_event = types.KeyboardButton("Додати запис")
+        check_events = types.KeyboardButton("Показати активні записи")
+        remove_event = types.KeyboardButton("Видалити запис")
+        check_today = types.KeyboardButton("Хто в мене на сьогодні")
+        check_tomorrow = types.KeyboardButton("Хто в мене на завтра")
+
+        markup.add(add_event, check_events, remove_event, check_today, check_tomorrow)
+        bot.send_message(ADMIN_ID, text="Чим можу допомогти?", reply_markup=markup)
+        bot.register_next_step_handler(self, admin_services_tree)
+
+
+def admin_services_tree(message):
+    if message.text == "Додати запис":
+        start_create_event(message)
+    elif message.text == "Показати активні записи":
+
+        events = get_all_events()[0]
+        for event in events:
+            date = f"{event['date'].day}.{calendar[str(event['date'].month)]}"
+            order = f"{event['user_first_name']}  {date}\n {event['procedure1']} {event['procedure2']}"
+            bot.send_message(ADMIN_ID, order)
+
+    elif message.text == "Видалити запис":
+       admin_delete(message)
+
+    elif message.text == "Хто в мене на сьогодні":
+        pass
+    elif message.text == "Хто в мене на завтра":
+        pass
+
+
+def admin_delete(message):
+    markup = types.ReplyKeyboardMarkup(resize_keyboard=True, row_width=1)
+    events = get_all_events()[0]
+    for event in events:
+        date = f"{event['date'].day}.{calendar[str(event['date'].month)]}"
+        order = f"id:{event['user_id']} {event['user_first_name']} {date}\n {event['procedure1']}"
+        markup.add(order)
+    bot.send_message(ADMIN_ID, text="Який саме запис видалити?", reply_markup=markup)
+    bot.register_next_step_handler(message, rem_selected_order)
+
+
 @bot.message_handler(commands=["start"])
 def start(message):
     clear_services()
@@ -22,27 +71,33 @@ def start(message):
     first_name = user.first_name
     markup = types.ReplyKeyboardMarkup(resize_keyboard=True, row_width=2)
 
-    if user_exist(message.from_user.id):
-        # welcome letter if user already exist
-        bot.send_message(message.from_user.id, f"Рада знову вас бачити, {first_name} ! 🖐\n"
-                                               f"{INSTA_MESSAGE_PART}{INSTA_LINK}",
-                         parse_mode="markdown")
+    if message.from_user.id == int(ADMIN_ID):
+        Admin.admin_start(message)
 
     else:
-        # welcome letter if user not exist
-        bot.send_message(message.from_user.id, f"Вітаю, {first_name} ! 🖐\n"
-                                               f"Я бот для запису до {INSTA_MESSAGE_PART}{INSTA_LINK}",
-                                               parse_mode="markdown")
 
-    """CREATING START BUTTONS"""
-    check_me_in = types.KeyboardButton("Записатися")
-    check_me_time = types.KeyboardButton("Нагадати про запис")
-    check_me_replace = types.KeyboardButton("Перенести запис")
-    cancel_order = types.KeyboardButton("Скасувати запис")
-    contacts = types.KeyboardButton("Мої контакти")
-    markup.add(check_me_in, check_me_time, check_me_replace, cancel_order, contacts)
+        if user_exist(message.from_user.id):
+            # welcome letter if user already exist
+            bot.send_message(message.from_user.id, f"Рада знову вас бачити, {first_name} ! 🖐\n"
+                                                   f"{INSTA_MESSAGE_PART}{INSTA_LINK}",
+                             parse_mode="markdown")
 
-    bot.send_message(message.from_user.id, text="Чим можу допомогти?", reply_markup=markup)
+        else:
+            # welcome letter if user not exist
+            bot.send_message(message.from_user.id, f"Вітаю, {first_name} ! 🖐\n"
+                                                   f"Я бот для запису до {INSTA_MESSAGE_PART}{INSTA_LINK} "
+                                                   f"ID: {message.from_user.id}",
+                                                   parse_mode="markdown")
+
+        """CREATING START BUTTONS"""
+        check_me_in = types.KeyboardButton("Записатися")
+        check_me_time = types.KeyboardButton("Нагадати про запис")
+        check_me_replace = types.KeyboardButton("Перенести запис")
+        cancel_order = types.KeyboardButton("Скасувати запис")
+        contacts = types.KeyboardButton("Мої контакти")
+        markup.add(check_me_in, check_me_time, check_me_replace, cancel_order, contacts)
+
+        bot.send_message(message.from_user.id, text="Чим можу допомогти?", reply_markup=markup)
 
 
 @bot.message_handler(func=lambda message: message.text.lower() == "записатися")
@@ -50,15 +105,16 @@ def start_create_event(message):
     """START OF CREATING ORDER"""
     markup = types.ReplyKeyboardMarkup(resize_keyboard=True, row_width=2)
     order = get_user_procedure(message.from_user.id)
-    if order:
-        bot.send_message(message.from_user.id, f"{order.meeting_time} \n {order.procedure1} \n {order.procedure2}")
-        cancel_order = types.KeyboardButton("Скасувати запис")
-        check_me_replace = types.KeyboardButton("Перенести запис")
-        markup.add(cancel_order, check_me_replace)
-        bot.send_message(message.from_user.id,
-                         text="Вибачете але у вас вже є активний запис \n"
-                              "Ви можете змінити час або видалити і створити новий запис",
-                         reply_markup=markup)
+    if message.from_user.id != int(ADMIN_ID):
+        if order:
+            bot.send_message(message.from_user.id, f"{order.meeting_time} \n {order.procedure1} \n {order.procedure2}")
+            cancel_order = types.KeyboardButton("Скасувати запис")
+            check_me_replace = types.KeyboardButton("Перенести запис")
+            markup.add(cancel_order, check_me_replace)
+            bot.send_message(message.from_user.id,
+                             text="Вибачете але у вас вже є активний запис \n"
+                                  "Ви можете змінити час або видалити і створити новий запис",
+                             reply_markup=markup)
     else:
         # event by user id is not exists
         manikyr = types.KeyboardButton("Ручки 💅")
@@ -68,8 +124,11 @@ def start_create_event(message):
         bot.register_next_step_handler(message, hands_or_foots_selection)
 
 
-@bot.message_handler(func=lambda message: message.text.lower() == "скасувати запис")
+@bot.message_handler(func=lambda message: message.text.lower() == "скасувати запис" or message.text == "Видалити запис")
 def cancel_event(message):
+    if message.from_user.id == int(ADMIN_ID):
+        admin_delete(message)
+        return
     """REMOVE ORDER IF EXISTS"""
     markup = types.ReplyKeyboardMarkup(resize_keyboard=True, row_width=2)
     check_me_in = types.KeyboardButton("Записатися")
@@ -209,6 +268,7 @@ def second_event(message):
 
 
 def final(message):
+    """ADD EVENT TO DB IF USER ALREADY EXISTS"""
     if message.text in ADDITIVES_LIST:
         new_services["additions"].append(message.text)
     new_services["user_first_name"] = message.from_user.first_name
