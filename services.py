@@ -1,12 +1,13 @@
 import re
 import random
-from datetime import datetime
+from datetime import datetime, timedelta
 
 from models import User, Session, Procedure, Addition, Order
 from configs import ADMIN_ID
 
 
 session = Session()
+visiting_time = {}
 
 calendar = {"1": "Січня",
             "2": "Лютого",
@@ -201,3 +202,30 @@ def rem_selected_order(message):
     except IndexError:
         print("Record was not deleted")
 
+
+def get_next_7days() -> list:
+    today = datetime.today()
+    next_days = []
+    for i in range(1, 8):
+        next_date = today + timedelta(days=i)
+        next_days.append(next_date.strftime("%d.%m.%y"))
+
+    return next_days
+
+
+def create_visiting_time() -> list:
+    start_time = datetime.strptime("15:00", "%H:%M")
+    time_points = []
+    # will generate 4 time points at intervals of hour
+    for i in range(4):
+        time_points.append(start_time.strftime("%H:%M"))
+        start_time += timedelta(hours=1)
+
+    return time_points
+
+
+def create_datetime() -> datetime:
+    date_string = f"{visiting_time['day']} {visiting_time['hour']}"
+    format_string = '%d.%m.%y %H:%M'
+    datetime_object = datetime.strptime(date_string, format_string)
+    return datetime_object

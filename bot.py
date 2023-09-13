@@ -1,11 +1,13 @@
-import re
 import telebot
 from telebot import types
-from configs import TOKEN, ADMIN_ID, INSTA_MESSAGE_PART, INSTA_LINK, ADDITIVES_LIST
-from models import User
-from services import add_user, user_exist, get_user_info, add_procedure,\
-    get_user_procedure, remove_order_record, change_order_time, get_all_events, calendar, rem_selected_order
 from datetime import datetime
+
+from models import User
+from configs import TOKEN, ADMIN_ID, INSTA_MESSAGE_PART, INSTA_LINK, ADDITIVES_LIST
+from services import add_user, user_exist, get_user_info, add_procedure,\
+    get_user_procedure, remove_order_record, change_order_time,\
+    get_all_events, calendar, rem_selected_order, get_next_7days,\
+    create_visiting_time, visiting_time, create_datetime
 
 
 bot = telebot.TeleBot(TOKEN)
@@ -40,12 +42,15 @@ def admin_services_tree(message):
 
         events = get_all_events()[0]
         for event in events:
-            date = f"{event['date'].day}.{calendar[str(event['date'].month)]}"
-            order = f"{event['user_first_name']}  {date}\n {event['procedure1']} {event['procedure2']}"
+            date = f"{event['date'].day}.{calendar[str(event['date'].month)]} " \
+                   f"{event['date'].hour}:{event['date'].minute}"
+            order = f"{event['user_first_name']} " \
+                    f" {date}\n {event['procedure1']} " \
+                    f"{event['procedure2']}"
             bot.send_message(ADMIN_ID, order)
 
     elif message.text == "Видалити запис":
-       admin_delete(message)
+        admin_delete(message)
 
     elif message.text == "Хто в мене на сьогодні":
         pass
@@ -75,11 +80,11 @@ def start(message):
         Admin.admin_start(message)
 
     else:
-
         if user_exist(message.from_user.id):
             # welcome letter if user already exist
-            bot.send_message(message.from_user.id, f"Рада знову вас бачити, {first_name} ! 🖐\n"
-                                                   f"{INSTA_MESSAGE_PART}{INSTA_LINK}",
+            bot.send_message(message.from_user.id,
+                             f"Рада знову вас бачити, {first_name} ! 🖐\n"
+                             f"{INSTA_MESSAGE_PART}{INSTA_LINK}",
                              parse_mode="markdown")
 
         else:
@@ -97,7 +102,9 @@ def start(message):
         contacts = types.KeyboardButton("Мої контакти")
         markup.add(check_me_in, check_me_time, check_me_replace, cancel_order, contacts)
 
-        bot.send_message(message.from_user.id, text="Чим можу допомогти?", reply_markup=markup)
+        bot.send_message(message.from_user.id,
+                         text="Чим можу допомогти?",
+                         reply_markup=markup)
 
 
 @bot.message_handler(func=lambda message: message.text.lower() == "записатися")
@@ -107,7 +114,10 @@ def start_create_event(message):
     order = get_user_procedure(message.from_user.id)
     if message.from_user.id != int(ADMIN_ID):
         if order:
-            bot.send_message(message.from_user.id, f"{order.meeting_time} \n {order.procedure1} \n {order.procedure2}")
+            bot.send_message(message.from_user.id,
+                             f"{order.meeting_time} \n "
+                             f"{order.procedure1} \n "
+                             f"{order.procedure2}")
             cancel_order = types.KeyboardButton("Скасувати запис")
             check_me_replace = types.KeyboardButton("Перенести запис")
             markup.add(cancel_order, check_me_replace)
@@ -116,15 +126,25 @@ def start_create_event(message):
                                   "Ви можете змінити час або видалити і створити новий запис",
                              reply_markup=markup)
     else:
-        # event by user id is not exists
-        manikyr = types.KeyboardButton("Ручки 💅")
-        pedik = types.KeyboardButton("Ніжки 👣")
-        markup.add(manikyr, pedik)
-        bot.send_message(message.from_user.id, text="Оберіть процедуру", reply_markup=markup)
-        bot.register_next_step_handler(message, hands_or_foots_selection)
+        wich_day(message)
 
 
-@bot.message_handler(func=lambda message: message.text.lower() == "скасувати запис" or message.text == "Видалити запис")
+def kind_service(message):
+    visiting_time["hour"] = message.text
+    print(visiting_time["day"], visiting_time["hour"])
+    markup = types.ReplyKeyboardMarkup(resize_keyboard=True, row_width=2)
+    # event by user id is not exists
+    manikyr = types.KeyboardButton("Ручки 💅")
+    pedik = types.KeyboardButton("Ніжки 👣")
+    markup.add(manikyr, pedik)
+    bot.send_message(message.from_user.id,
+                     text="Оберіть процедуру",
+                     reply_markup=markup)
+    bot.register_next_step_handler(message, hands_or_foots_selection)
+
+
+@bot.message_handler(func=lambda message: message.text.lower() == "скасувати запис"
+                     or message.text == "Видалити запис")
 def cancel_event(message):
     if message.from_user.id == int(ADMIN_ID):
         admin_delete(message)
@@ -179,6 +199,29 @@ def recall_event(message):
         bot.send_message(message.from_user.id,
                          text="Вибачте але у вас поки що немає активних записів",
                          reply_markup=markup)
+
+
+def wich_day(message):
+    user_id = message.from_user.id
+    markup = types.ReplyKeyboardMarkup(resize_keyboard=True, row_width=2)
+    days_list = get_next_7days()
+    for day in days_list:
+        markup.add(str(day))
+    bot.send_message(user_id, text="На який день бажаєта записатись?", reply_markup=markup)
+    bot.register_next_step_handler(message, select_time)
+
+
+def select_time(message):
+    visiting_time.clear()
+    visiting_time["day"] = message.text
+    markup = types.ReplyKeyboardMarkup(resize_keyboard=True, row_width=2)
+    time_points = create_visiting_time()
+    for point in time_points:
+        markup.add(str(point))
+    bot.send_message(message.from_user.id,
+                     text=f"Ви вибрали дату {message.text} На який час вас записати?",
+                     reply_markup=markup)
+    bot.register_next_step_handler(message, kind_service)
 
 
 def hands_or_foots_selection(message):
@@ -277,7 +320,7 @@ def final(message):
         bot.register_next_step_handler(message, get_user_phone)
     else:
         new_services["user_phone"] = get_user_info(message.from_user.id).user_mobile
-        event_to_db(user_id=message.from_user.id, time=datetime.utcnow())
+        event_to_db(user_id=message.from_user.id, time=create_datetime())
 
 
 def get_user_phone(message):
